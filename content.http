@@ -1,0 +1,9 @@
+POST http://localhost:8082/api/v1/bank-transfers
+Content-Type: application/json
+
+{
+  "accountFromIBAN": "DE837473637269004",
+  "transferValue": "1.37",
+  "accountToIBAN": "ES87372989377364",
+  "reference": "Mc Donalds Barcelona"
+}

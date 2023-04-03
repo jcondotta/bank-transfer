@@ -1,0 +1,40 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: bank-transfer
+
+  datasource:
+    url: jdbc:mysql://localhost:3406/bank_transfers_db
+    username: admin
+    password: sB6mbtzNHmCQI4eN4yLo
+    driverClassName: com.mysql.cj.jdbc.Driver
+
+  kafka:
+    bootstrap-servers: localhost:9093
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring:
+          json:
+            trusted:
+              packages: "*"
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+  jackson:
+    mapper:
+      accept-case-insensitive-enums: true
+
+app:
+  kafka:
+    bank-transfer-topic: bank-transfer
+    bank-transfer-topic-group-id: bank-transfer
