@@ -1,7 +1,7 @@
 package com.blitzar.banktransfer.service;
 
 import com.blitzar.banktransfer.config.kafka.KafkaApplicationProperties;
-import com.blitzar.banktransfer.events.BankTransferEvent;
+import com.blitzar.banktransfer.service.events.BankTransferEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -21,7 +21,8 @@ public class BankTransferEventProducer {
     }
 
     public void handle(BankTransferEvent bankTransferEvent){
-        logger.info("Producing a event to transfer:{} from account:{} to:{}", bankTransferEvent.transferValue(), bankTransferEvent.accountFromIBAN(), bankTransferEvent.accountToIBAN());
+        logger.info("Producing a bank transfer of: €{} from account: {} to account: {}", bankTransferEvent.transferValue(), bankTransferEvent.accountFromIBAN(), bankTransferEvent.accountToIBAN());
+
         kafkaTemplate.send(kafkaApplicationProperties.bankTransferTopic(), bankTransferEvent);
     }
 }
