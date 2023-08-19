@@ -1,40 +1,48 @@
-server:
-  port: 8088
-
-spring:
+micronaut:
   application:
     name: bank-transfer
+  server:
+    port: 8091
 
-  datasource:
-    url: jdbc:mysql://localhost:3406/bank_transfers_db
-    username: admin
-    password: sB6mbtzNHmCQI4eN4yLo
-    driverClassName: com.mysql.cj.jdbc.Driver
+  jms:
+    sqs:
+      enabled: true
 
-  kafka:
-    bootstrap-servers: localhost:9093
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-    consumer:
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring:
-          json:
-            trusted:
-              packages: "*"
-
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
-
-  jackson:
-    mapper:
-      accept-case-insensitive-enums: true
+aws:
+  access-key-id: ${AWS_ACCESS_KEY_ID}
+  secret-key: ${AWS_SECRET_ACCESS_KEY}
+  region: ${AWS_DEFAULT_REGION}
+  sqs:
+    endpoint: ${AWS_SQS_ENDPOINT}
 
 app:
-  kafka:
-    bank-transfer-topic: bank-transfer
-    bank-transfer-topic-group-id: bank-transfer
+  aws:
+    sqs:
+      bank-transfer-queue-name: bank-transfer
+
+datasources:
+  default:
+    url: ${database.url}
+    username: ${database.username}
+    password: ${database.password}
+    driverClassName: ${database.driver:com.mysql.cj.jdbc.Driver}
+
+flyway:
+  datasources:
+    default:
+      enabled: true
+
+jpa:
+  default:
+    entity-scan:
+      packages: 'com.blitzar.banktransfer.domain'
+    properties:
+      hibernate:
+        hbm2ddl:
+          auto: none
+      show-sql: true
+
+jackson:
+  mapper:
+    accept-case-insensitive-enums: true
+    accept-single-value-as-array: true

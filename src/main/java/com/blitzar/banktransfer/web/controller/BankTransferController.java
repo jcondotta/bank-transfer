@@ -1,31 +1,48 @@
 package com.blitzar.banktransfer.web.controller;
 
-import com.blitzar.banktransfer.service.events.BankTransferEvent;
 import com.blitzar.banktransfer.service.BankTransferEventProducer;
-import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.context.request.WebRequest;
+import com.blitzar.banktransfer.service.events.BankTransferEvent;
+import io.micronaut.context.MessageSource;
+import io.micronaut.http.HttpResponse;
+import io.micronaut.http.HttpStatus;
+import io.micronaut.http.MediaType;
+import io.micronaut.http.annotation.Body;
+import io.micronaut.http.annotation.Controller;
+import io.micronaut.http.annotation.Post;
+import io.micronaut.http.annotation.Status;
+import io.micronaut.validation.Validated;
+import jakarta.inject.Inject;
 
-@RestController
-@RequestMapping("/api/v1/bank-transfers")
+import javax.validation.ConstraintViolationException;
+import javax.validation.Validator;
+import java.util.Locale;
+
+@Validated
+@Controller(BankTransferAPIConstants.BASE_PATH_API_V1_MAPPING)
 public class BankTransferController {
 
-    private BankTransferEventProducer bankTransferEventProducer;
+    private final BankTransferEventProducer bankTransferEventProducer;
+    private final Validator validator;
+    private final MessageSource messageSource;
 
-    @Autowired
-    public BankTransferController(BankTransferEventProducer bankTransferEventProducer) {
+    @Inject
+    public BankTransferController(BankTransferEventProducer bankTransferEventProducer, Validator validator, MessageSource messageSource) {
         this.bankTransferEventProducer = bankTransferEventProducer;
+        this.validator = validator;
+        this.messageSource = messageSource;
     }
 
-    @ResponseStatus(HttpStatus.ACCEPTED)
-    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> registerBankTransfer(@Valid @RequestBody BankTransferEvent bankTransferEvent, WebRequest request){
-        bankTransferEventProducer.handle(bankTransferEvent);
+    @Status(HttpStatus.ACCEPTED)
+    @Post(consumes = MediaType.APPLICATION_JSON)
+    public HttpResponse<?> registerBankTransfer(@Body BankTransferEvent bankTransferEvent){
+        var constraintViolations = validator.validate(bankTransferEvent);
+        if(!constraintViolations.isEmpty()){
+            throw new ConstraintViolationException(constraintViolations);
+        }
 
-        return ResponseEntity.accepted().build();
+        bankTransferEventProducer.sendMessage(bankTransferEvent);
+
+        var bankTransferAcceptedMessage = messageSource.getMessage("bank-transfer.accepted", Locale.getDefault()).orElse(null);
+        return HttpResponse.accepted().body(bankTransferAcceptedMessage);
     }
 }

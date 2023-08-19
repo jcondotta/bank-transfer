@@ -1,27 +1,28 @@
 package com.blitzar.banktransfer.web.controller;
 
+import com.amazonaws.services.sqs.AmazonSQS;
+import com.amazonaws.services.sqs.model.CreateQueueRequest;
+import com.blitzar.banktransfer.LocalStackMySQLTestContainer;
 import com.blitzar.banktransfer.argumentprovider.InvalidStringArgumentProvider;
 import com.blitzar.banktransfer.service.events.BankTransferEvent;
-import com.blitzar.banktransfer.web.KafkaTestContainer;
-import com.blitzar.banktransfer.web.MySQLTestContainer;
+import io.micronaut.context.MessageSource;
+import io.micronaut.context.annotation.Value;
+import io.micronaut.http.HttpStatus;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.restassured.RestAssured;
-import io.restassured.builder.RequestSpecBuilder;
 import io.restassured.http.ContentType;
 import io.restassured.specification.RequestSpecification;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.TestInstance.Lifecycle;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ArgumentsSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.MessageSource;
-import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
 import java.util.Locale;
@@ -30,32 +31,46 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 
-@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-public class BankTransferControllerTest implements MySQLTestContainer, KafkaTestContainer {
+@TestInstance(Lifecycle.PER_CLASS)
+@MicronautTest(transactional = false)
+public class BankTransferControllerTest implements LocalStackMySQLTestContainer {
 
-    @Autowired
-    @Qualifier("exceptionMessageSource")
+    @Inject
+    @Named("exceptionMessageSource")
     private MessageSource exceptionMessageSource;
+
+    @Inject
+    private AmazonSQS sqsClient;
+
+    @Value("${app.aws.sqs.bank-transfer-queue-name}")
+    private String bankAccountApplicationQueueName;
+
+    private String bankAccountApplicationQueueURL;
 
     private RequestSpecification requestSpecification;
 
+    private String accountFromIBAN = "ES6531908221216475895468";
+    private BigDecimal transferValue = BigDecimal.TEN;
+    private String accountToIBAN = "DE79500105177228677684";
+    private String reference = "Donate";
+
     @BeforeAll
-    public static void beforeAll(@LocalServerPort int serverHttpPort){
-        RestAssured.port = serverHttpPort;
-        RestAssured.basePath = "/api/v1/bank-transfers";
+    public static void beforeAll(){
         RestAssured.enableLoggingOfRequestAndResponseIfValidationFails();
     }
 
     @BeforeEach
-    public void beforeEach() {
-        this.requestSpecification = new RequestSpecBuilder()
-                .setContentType(ContentType.JSON)
-                .build();
+    public void beforeEach(RequestSpecification requestSpecification) {
+        this.requestSpecification = requestSpecification
+                .contentType(ContentType.JSON)
+                .basePath(BankTransferAPIConstants.BASE_PATH_API_V1_MAPPING);
+
+        this.bankAccountApplicationQueueURL = sqsClient.createQueue(bankAccountApplicationQueueName).getQueueUrl();
     }
 
     @Test
     public void givenValidRequest_whenRegisterBankTransfer_thenSuccess(){
-        var bankTransferEvent = new BankTransferEvent("ES6531908221216475895468", BigDecimal.TEN, "DE79500105177228677684", "Payment");
+        var bankTransferEvent = new BankTransferEvent(accountFromIBAN, transferValue, accountToIBAN, reference);
 
         given()
             .spec(requestSpecification)
@@ -63,13 +78,13 @@ public class BankTransferControllerTest implements MySQLTestContainer, KafkaTest
         .when()
             .post()
         .then()
-            .statusCode(HttpStatus.ACCEPTED.value());
+            .statusCode(HttpStatus.ACCEPTED.getCode());
     }
 
     @ParameterizedTest
     @ArgumentsSource(InvalidStringArgumentProvider.class)
     public void givenInvalidAccountFromIBAN_whenRegisterBankTransfer_thenThrowException(String invalidAccountFromIBAN){
-        var bankTransferEvent = new BankTransferEvent(invalidAccountFromIBAN, BigDecimal.TEN, "DE79500105177228677684", "Payment");
+        var bankTransferEvent = new BankTransferEvent(invalidAccountFromIBAN, transferValue, accountToIBAN, reference);
 
         given()
             .spec(requestSpecification)
@@ -77,18 +92,16 @@ public class BankTransferControllerTest implements MySQLTestContainer, KafkaTest
         .when()
             .post()
         .then()
-            .statusCode(HttpStatus.BAD_REQUEST.value())
-                .body("title", equalTo(HttpStatus.BAD_REQUEST.getReasonPhrase()))
-                .body("status", equalTo(HttpStatus.BAD_REQUEST.value()))
-                .body("instance", equalTo(RestAssured.basePath))
+            .statusCode(HttpStatus.BAD_REQUEST.getCode())
+            .rootPath("_embedded")
                 .body("errors", hasSize(1))
-                    .body("errors[0].field", equalTo("accountFromIBAN"))
-                    .body("errors[0].message", equalTo(exceptionMessageSource.getMessage("bankTransfer.accountFromIBAN.notBlank", null, Locale.getDefault())));
+                .body("errors[0].message", equalTo(exceptionMessageSource.
+                        getMessage("bankTransfer.accountFromIBAN.notBlank", Locale.getDefault()).orElseThrow()));
     }
 
     @Test
     public void givenNullTransferValue_whenRegisterBankTransfer_thenThrowException(){
-        var bankTransferEvent = new BankTransferEvent("ES6531908221216475895468", null, "DE79500105177228677684", "Payment");
+        var bankTransferEvent = new BankTransferEvent(accountFromIBAN, null, accountToIBAN, reference);
 
         given()
             .spec(requestSpecification)
@@ -96,20 +109,18 @@ public class BankTransferControllerTest implements MySQLTestContainer, KafkaTest
         .when()
             .post()
         .then()
-            .statusCode(HttpStatus.BAD_REQUEST.value())
-                .body("title", equalTo(HttpStatus.BAD_REQUEST.getReasonPhrase()))
-                .body("status", equalTo(HttpStatus.BAD_REQUEST.value()))
-                .body("instance", equalTo(RestAssured.basePath))
+            .statusCode(HttpStatus.BAD_REQUEST.getCode())
+            .rootPath("_embedded")
                 .body("errors", hasSize(1))
-                    .body("errors[0].field", equalTo("transferValue"))
-                    .body("errors[0].message", equalTo(exceptionMessageSource.getMessage("bankTransfer.transferValue.notNull", null, Locale.getDefault())));
+                .body("errors[0].message", equalTo(exceptionMessageSource.
+                        getMessage("bankTransfer.transferValue.notNull", Locale.getDefault()).orElseThrow()));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"-0.01", "0.00"})
     public void givenNotPositiveTransferValue_whenRegisterBankTransfer_thenThrowException(String stringTransferValue){
-        BigDecimal transferValue = new BigDecimal(stringTransferValue);
-        var bankTransferEvent = new BankTransferEvent("ES6531908221216475895468", transferValue, "DE79500105177228677684", "Payment");
+        BigDecimal invalidTransferValue = new BigDecimal(stringTransferValue);
+        var bankTransferEvent = new BankTransferEvent(accountFromIBAN, invalidTransferValue, accountToIBAN, reference);
 
         given()
             .spec(requestSpecification)
@@ -117,19 +128,17 @@ public class BankTransferControllerTest implements MySQLTestContainer, KafkaTest
         .when()
             .post()
         .then()
-            .statusCode(HttpStatus.BAD_REQUEST.value())
-                .body("title", equalTo(HttpStatus.BAD_REQUEST.getReasonPhrase()))
-                .body("status", equalTo(HttpStatus.BAD_REQUEST.value()))
-                .body("instance", equalTo(RestAssured.basePath))
+            .statusCode(HttpStatus.BAD_REQUEST.getCode())
+            .rootPath("_embedded")
                 .body("errors", hasSize(1))
-                    .body("errors[0].field", equalTo("transferValue"))
-                    .body("errors[0].message", equalTo(exceptionMessageSource.getMessage("bankTransfer.transferValue.positive", null, Locale.getDefault())));
+                .body("errors[0].message", equalTo(exceptionMessageSource.
+                        getMessage("bankTransfer.transferValue.positive", Locale.getDefault()).orElseThrow()));
     }
 
     @ParameterizedTest
     @ArgumentsSource(InvalidStringArgumentProvider.class)
     public void givenInvalidAccountToIBAN_whenRegisterBankTransfer_thenThrowException(String invalidAccountToIBAN){
-        var bankTransferEvent = new BankTransferEvent("ES6531908221216475895468", BigDecimal.TEN, invalidAccountToIBAN, "Payment");
+        var bankTransferEvent = new BankTransferEvent(accountFromIBAN, transferValue, invalidAccountToIBAN, reference);
 
         given()
             .spec(requestSpecification)
@@ -137,19 +146,17 @@ public class BankTransferControllerTest implements MySQLTestContainer, KafkaTest
         .when()
             .post()
         .then()
-            .statusCode(HttpStatus.BAD_REQUEST.value())
-                .body("title", equalTo(HttpStatus.BAD_REQUEST.getReasonPhrase()))
-                .body("status", equalTo(HttpStatus.BAD_REQUEST.value()))
-                .body("instance", equalTo(RestAssured.basePath))
+            .statusCode(HttpStatus.BAD_REQUEST.getCode())
+            .rootPath("_embedded")
                 .body("errors", hasSize(1))
-                    .body("errors[0].field", equalTo("accountToIBAN"))
-                    .body("errors[0].message", equalTo(exceptionMessageSource.getMessage("bankTransfer.accountToIBAN.notBlank", null, Locale.getDefault())));
+                .body("errors[0].message", equalTo(exceptionMessageSource.
+                        getMessage("bankTransfer.accountToIBAN.notBlank", Locale.getDefault()).orElseThrow()));
     }
 
     @Test
     public void givenReferenceLongerThan30Characters_whenRegisterBankTransfer_thenThrowException(){
         var invalidBankTransferReference = RandomStringUtils.randomAlphabetic(31);
-        var bankTransferEvent = new BankTransferEvent("ES6531908221216475895468", BigDecimal.TEN, "DE79500105177228677684", invalidBankTransferReference);
+        var bankTransferEvent = new BankTransferEvent(accountFromIBAN, transferValue, accountToIBAN, invalidBankTransferReference);
 
         given()
             .spec(requestSpecification)
@@ -157,12 +164,10 @@ public class BankTransferControllerTest implements MySQLTestContainer, KafkaTest
         .when()
             .post()
         .then()
-            .statusCode(HttpStatus.BAD_REQUEST.value())
-                .body("title", equalTo(HttpStatus.BAD_REQUEST.getReasonPhrase()))
-                .body("status", equalTo(HttpStatus.BAD_REQUEST.value()))
-                .body("instance", equalTo(RestAssured.basePath))
+            .statusCode(HttpStatus.BAD_REQUEST.getCode())
+            .rootPath("_embedded")
                 .body("errors", hasSize(1))
-                    .body("errors[0].field", equalTo("reference"))
-                    .body("errors[0].message", equalTo(exceptionMessageSource.getMessage("bankTransfer.reference.length.limit", null, Locale.getDefault())));
+                .body("errors[0].message", equalTo(exceptionMessageSource.
+                        getMessage("bankTransfer.reference.length.limit", Locale.getDefault()).orElseThrow()));
     }
 }

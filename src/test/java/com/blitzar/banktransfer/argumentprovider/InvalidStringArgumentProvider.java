@@ -8,7 +8,7 @@ import org.junit.jupiter.params.provider.ArgumentsProvider;
 
 import java.util.stream.Stream;
 
-import static org.apache.commons.text.StringEscapeUtils.escapeJava;
+import static groovy.json.StringEscapeUtils.escapeJava;
 
 public class InvalidStringArgumentProvider implements ArgumentsProvider {
 

@@ -1,9 +1,9 @@
 package com.blitzar.banktransfer.repository;
 
 import com.blitzar.banktransfer.domain.BankTransfer;
-import org.springframework.data.repository.CrudRepository;
-import org.springframework.stereotype.Repository;
+import io.micronaut.data.annotation.Repository;
+import io.micronaut.data.jpa.repository.JpaRepository;
 
 @Repository
-public interface BankTransferRepository extends CrudRepository<BankTransfer, Long> {
+public interface BankTransferRepository extends JpaRepository<BankTransfer, Long> {
 }
