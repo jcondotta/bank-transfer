@@ -1,10 +1,10 @@
-### Bank Transfer (rest api -> kafka)
-POST http://localhost:8088/api/v1/bank-transfers
+// @no-log
+POST {{host}}/api/v1/bank-transfers
 Content-Type: application/json
 
 {
   "accountFromIBAN": "ES6531908221216475895468",
   "transferValue": 1050.72,
   "accountToIBAN": "DE79500105177228677684",
-  "reference": "Pay the bills"
+  "reference": "Donate"
 }

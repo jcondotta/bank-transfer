@@ -33,7 +33,7 @@ import static org.hamcrest.Matchers.hasSize;
 
 @TestInstance(Lifecycle.PER_CLASS)
 @MicronautTest(transactional = false)
-public class BankTransferControllerTest implements LocalStackMySQLTestContainer {
+public class BankTransactionControllerTest implements LocalStackMySQLTestContainer {
 
     @Inject
     @Named("exceptionMessageSource")

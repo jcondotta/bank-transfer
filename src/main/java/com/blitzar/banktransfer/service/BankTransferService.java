@@ -1,6 +1,6 @@
 package com.blitzar.banktransfer.service;
 
-import com.blitzar.banktransfer.domain.BankTransfer;
+import com.blitzar.banktransfer.domain.BankTransaction;
 import com.blitzar.banktransfer.repository.BankTransferRepository;
 import com.blitzar.banktransfer.service.events.BankTransferEvent;
 import jakarta.inject.Inject;
@@ -33,12 +33,12 @@ public class BankTransferService {
             throw new ConstraintViolationException(bankTransferViolations);
         }
 
-        var bankTransfer = new BankTransfer();
+        var bankTransfer = new BankTransaction();
 
         bankTransfer.setAccountFromIBAN(bankTransferEvent.getAccountFromIBAN());
-        bankTransfer.setTransferValue(bankTransferEvent.getTransferValue());
+        bankTransfer.setTransactionAmount(bankTransferEvent.getTransferValue());
         bankTransfer.setAccountToIBAN(bankTransferEvent.getAccountToIBAN());
-        bankTransfer.setTransferDate(LocalDateTime.now(currentInstant));
+        bankTransfer.setTransactionDate(LocalDateTime.now(currentInstant));
         bankTransfer.setReference(bankTransferEvent.getReference());
 
         repository.save(bankTransfer);
